@@ -3,12 +3,27 @@ name: Release native apps
 on:
   repository_dispatch:
     types: [source-release]
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Source commit to build
+        required: true
+        type: string
+      release_tag:
+        description: Release tag, for example app-v0.1.22
+        required: true
+        type: string
+      draft_only:
+        description: Keep the result as a draft for testing
+        required: true
+        default: true
+        type: boolean
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.event.client_payload.source_sha }}
+  group: release-${{ github.event.client_payload.source_sha || inputs.source_sha }}
   cancel-in-progress: false
 
 jobs:
@@ -23,22 +38,28 @@ jobs:
         with:
           repository: Whales-Group/digitwhale_tide_web
           token: ${{ secrets.SOURCE_REPO_PAT }}
-          ref: ${{ github.event.client_payload.source_sha }}
+          ref: ${{ github.event.client_payload.source_sha || inputs.source_sha }}
           persist-credentials: false
           fetch-depth: 0
           show-progress: false
       - name: Verify all release versions
         run: npm run release:verify --silent >/dev/null 2>&1 || { echo 'Release version verification failed.'; exit 1; }
-      - name: Verify dispatched source tag
+      - name: Verify source commit and release tag
         id: tag
         env:
-          SOURCE_SHA: ${{ github.event.client_payload.source_sha }}
-          RELEASE_TAG: ${{ github.event.client_payload.release_tag }}
+          SOURCE_SHA: ${{ github.event.client_payload.source_sha || inputs.source_sha }}
+          RELEASE_TAG: ${{ github.event.client_payload.release_tag || inputs.release_tag }}
+          EVENT_NAME: ${{ github.event_name }}
         shell: bash
         run: |
           version=$(node -p "require('./src-tauri/tauri.conf.json').version")
           test "$RELEASE_TAG" = "app-v${version}" || { echo "Release tag does not match app version."; exit 1; }
-          test "$(git rev-list -n 1 "$RELEASE_TAG")" = "$SOURCE_SHA" || { echo "Release tag does not match source commit."; exit 1; }
+          git rev-parse --verify "$SOURCE_SHA^{commit}" >/dev/null || { echo "Source commit could not be checked out."; exit 1; }
+          if [ "$EVENT_NAME" = "repository_dispatch" ]; then
+            test "$(git rev-list -n 1 "$RELEASE_TAG")" = "$SOURCE_SHA" || { echo "Release tag does not match source commit."; exit 1; }
+          elif ! git rev-parse --verify "$RELEASE_TAG^{commit}" >/dev/null 2>&1; then
+            git tag "$RELEASE_TAG" "$SOURCE_SHA"
+          fi
           echo "tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
       - name: Ensure release draft exists before builds
         env:
@@ -112,7 +133,7 @@ jobs:
         with:
           repository: Whales-Group/digitwhale_tide_web
           token: ${{ secrets.SOURCE_REPO_PAT }}
-          ref: ${{ github.event.client_payload.source_sha }}
+          ref: ${{ github.event.client_payload.source_sha || inputs.source_sha }}
           persist-credentials: false
           show-progress: false
       - uses: actions/setup-node@v4
@@ -162,7 +183,7 @@ jobs:
         with:
           repository: Whales-Group/digitwhale_tide_web
           token: ${{ secrets.SOURCE_REPO_PAT }}
-          ref: ${{ github.event.client_payload.source_sha }}
+          ref: ${{ github.event.client_payload.source_sha || inputs.source_sha }}
           persist-credentials: false
           show-progress: false
       - uses: actions/setup-node@v4
@@ -222,7 +243,7 @@ jobs:
   publish:
     needs: [prepare-release, desktop, android]
     name: Publish available builds
-    if: always() && needs.prepare-release.result == 'success' && github.event.client_payload.draft_only != true
+    if: always() && needs.prepare-release.result == 'success' && github.event.client_payload.draft_only != true && inputs.draft_only != true
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -230,18 +251,22 @@ jobs:
         with:
           repository: Whales-Group/digitwhale_tide_web
           token: ${{ secrets.SOURCE_REPO_PAT }}
-          ref: ${{ github.event.client_payload.source_sha }}
+          ref: ${{ github.event.client_payload.source_sha || inputs.source_sha }}
           persist-credentials: false
           fetch-depth: 0
           show-progress: false
       - name: Publish release and preserve updater feed
         env:
           GH_TOKEN: ${{ secrets.AURDALY_RELEASES_TOKEN }}
+          SOURCE_SHA: ${{ github.event.client_payload.source_sha || inputs.source_sha }}
           RELEASE_TAG: ${{ needs.prepare-release.outputs.release_tag }}
         shell: bash
         run: |
           repo=Whales-Group/aurdaly-releases
           version="${RELEASE_TAG#app-v}"
+          if ! git rev-parse --verify "$RELEASE_TAG^{commit}" >/dev/null 2>&1; then
+            git tag "$RELEASE_TAG" "$SOURCE_SHA"
+          fi
           changes=$(node scripts/generate-release-notes.mjs "$RELEASE_TAG")
           notes=$(cat <<EOF
           ${changes}
