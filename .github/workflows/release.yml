@@ -154,9 +154,6 @@ jobs:
       - run: npm ci
       - name: Verify release version
         run: node -e 'const { spawnSync } = require("node:child_process"); const r = spawnSync(process.execPath, ["scripts/release-version.mjs", "verify"], { stdio: "ignore" }); if (r.status !== 0) { console.error("Release version verification failed."); process.exit(1); }'
-      - name: Increase Node.js heap for Linux release build
-        if: startsWith(matrix.runner, 'ubuntu')
-        run: echo "NODE_OPTIONS=--max-old-space-size=4096" >> "$GITHUB_ENV"
       - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.AURDALY_RELEASES_TOKEN }}
