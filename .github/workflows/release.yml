@@ -153,7 +153,8 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
       - run: npm ci
       - name: Verify release version
-        run: node -e 'const { spawnSync } = require("node:child_process"); const r = spawnSync(process.execPath, ["scripts/release-version.mjs", "verify"], { stdio: "ignore" }); if (r.status !== 0) { console.error("Release version verification failed."); process.exit(1); }'
+        run: |
+          node -e 'const { spawnSync } = require("node:child_process"); const r = spawnSync(process.execPath, ["scripts/release-version.mjs", "verify"], { stdio: "ignore" }); if (r.status !== 0) { console.error("Release version verification failed."); process.exit(1); }'
       - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.AURDALY_RELEASES_TOKEN }}
@@ -200,7 +201,8 @@ jobs:
           targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
       - run: npm ci
       - name: Verify release version
-        run: node -e 'const { spawnSync } = require("node:child_process"); const r = spawnSync(process.execPath, ["scripts/release-version.mjs", "verify"], { stdio: "ignore" }); if (r.status !== 0) { console.error("Release version verification failed."); process.exit(1); }'
+        run: |
+          node -e 'const { spawnSync } = require("node:child_process"); const r = spawnSync(process.execPath, ["scripts/release-version.mjs", "verify"], { stdio: "ignore" }); if (r.status !== 0) { console.error("Release version verification failed."); process.exit(1); }'
       - name: Restore Android Firebase configuration
         env:
           FIREBASE_ANDROID_JSON_BASE64: ${{ secrets.FIREBASE_ANDROID_JSON_BASE64 }}
