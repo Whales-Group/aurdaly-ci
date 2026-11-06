@@ -222,7 +222,7 @@ jobs:
   publish:
     needs: [prepare-release, desktop, android]
     name: Publish available builds
-    if: always() && needs.prepare-release.result == 'success'
+    if: always() && needs.prepare-release.result == 'success' && github.event.client_payload.draft_only != true
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
